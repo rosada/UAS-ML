@@ -1,0 +1,138 @@
+# Mengimpor pustaka yang diperlukan
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.feature_selection import SelectKBest, f_classif
+from imblearn.over_sampling import SMOTE
+from google.colab import files
+from collections import Counter
+from sklearn.compose import ColumnTransformer
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+# Mengunggah file dari komputer lokal
+print("\n📂 Mengunggah file, silakan pilih dataset Anda...")
+uploaded = files.upload()
+
+# Membaca dataset
+filename = list(uploaded.keys())[0]
+df = pd.read_csv(filename)
+
+print("\n🔍 Menampilkan 5 baris pertama dari dataset:")
+print(df.head())
+
+print("\n📊 Informasi dataset:")
+print(df.info())
+
+print("\n📈 Statistik deskriptif:")
+print(df.describe())
+
+# Mengecek apakah kolom target ada dalam dataset
+target_column = 'STATUS KELULUSAN'
+if target_column not in df.columns:
+    raise ValueError(f"❌ Kolom target '{target_column}' tidak ditemukan dalam dataset!")
+
+print("\n⚖️ Distribusi kelas sebelum SMOTE:")
+print(df[target_column].value_counts())
+
+# Menangani missing value
+print("\n🛠️ Menangani nilai hilang...")
+df.fillna(df.median(numeric_only=True).to_dict(), inplace=True)
+categorical_features = df.select_dtypes(include=['object']).columns.tolist()
+df.fillna({col: df[col].mode()[0] for col in categorical_features}, inplace=True)
+print("✅ Nilai hilang telah ditangani.")
+print("\n📜 Data setelah menangani nilai hilang:")
+print(df.head())
+
+# Memisahkan fitur (X) dan target (y) SEBELUM OneHotEncoding
+X = df.drop(columns=[target_column])  # Fitur
+y = df[target_column]  # Target
+
+# Mengidentifikasi fitur kategorikal setelah menghapus kolom target
+categorical_features = X.select_dtypes(include=['object']).columns.tolist()
+
+# OneHotEncoding untuk semua fitur kategorikal
+print("\n🔄 Mengonversi semua fitur kategorikal menggunakan OneHotEncoder...")
+encoder = ColumnTransformer(transformers=[('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical_features)], remainder='passthrough')
+
+# Terapkan OneHotEncoding
+X_encoded = encoder.fit_transform(X)
+encoded_feature_names = encoder.get_feature_names_out()
+
+# Mengubah ke DataFrame dengan nama kolom baru
+X_encoded_df = pd.DataFrame(X_encoded, columns=encoded_feature_names)
+print("✅ Konversi OneHotEncoding selesai.")
+print("\n📜 Data setelah OneHotEncoding:")
+print(X_encoded_df.head())
+
+# Normalisasi fitur numerik
+print("\n📏 Melakukan normalisasi fitur numerik...")
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_encoded_df)
+X_scaled_df = pd.DataFrame(X_scaled, columns=X_encoded_df.columns)
+
+# Menghapus fitur konstan (yang hanya memiliki 1 nilai unik)
+X_scaled_df = X_scaled_df.loc[:, X_scaled_df.apply(pd.Series.nunique) != 1]
+print("✅ Normalisasi selesai.")
+print("\n📜 Data setelah normalisasi:")
+print(X_scaled_df.head())
+
+# Pemilihan fitur terbaik
+print("\n🏆 Memilih fitur terbaik menggunakan SelectKBest...")
+selector = SelectKBest(score_func=f_classif, k=min(10, X_scaled_df.shape[1]))
+X_selected = selector.fit_transform(X_scaled_df, y)
+selected_features = X_scaled_df.columns[selector.get_support()]
+print("✨ Fitur yang terpilih:")
+print(selected_features)
+print("\n📜 Data setelah pemilihan fitur:")
+print(pd.DataFrame(X_selected, columns=selected_features).head())
+
+# Menyeimbangkan data menggunakan SMOTE
+print("\n⚖️ Menyeimbangkan data menggunakan SMOTE...")
+smote = SMOTE(random_state=42, k_neighbors=1)
+X_resampled, y_resampled = smote.fit_resample(X_selected, y)
+print("\n📊 Distribusi kelas setelah SMOTE:")
+print(Counter(y_resampled))
+
+# Membagi data menjadi training dan testing
+X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
+
+# Membangun model Decision Tree
+print("\n🌳 Membangun model Decision Tree...")
+model = DecisionTreeClassifier(random_state=42)
+model.fit(X_train, y_train)
+print("✅ Model Decision Tree telah dilatih.")
+
+# Memprediksi hasil pada data training
+y_train_pred = model.predict(X_train)
+train_accuracy = accuracy_score(y_train, y_train_pred)
+
+print("\n📜 Hasil prediksi pada data training:")
+print(pd.DataFrame({'Actual': y_train, 'Predicted': y_train_pred}).head())
+
+print(f"\n📊 Akurasi pada data training: {train_accuracy:.2f}")
+
+# Evaluasi model pada data uji
+print("\n🛠️ Evaluasi model pada data uji...")
+y_pred = model.predict(X_test)
+
+accuracy = accuracy_score(y_test, y_pred)
+print(f"\n🎯 Akurasi pada data uji: {accuracy:.2f}")
+
+print("\n📜 Classification Report:")
+print(classification_report(y_test, y_pred))
+
+# Menampilkan confusion matrix
+print("\n📊 Confusion Matrix:")
+cm = confusion_matrix(y_test, y_pred)
+plt.figure(figsize=(6,4))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=np.unique(y_test), yticklabels=np.unique(y_test))
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.title('Confusion Matrix')
+plt.show()
+
+print("\n✅ Model telah dievaluasi dan hasilnya ditampilkan!")
