@@ -1,0 +1,41 @@
+import numpy as np
+import pandas as pd
+from sklearn.mixture import GaussianMixture
+from sklearn.metrics import adjusted_rand_score
+
+# Data dari tabel
+data = np.array([
+    [2.25, 3.47], [4.71, 3.60], [3.17, 4.96], [2.32, 1.63], [2.31, 2.09], 
+    [1.14, 2.11], [1.90, 0.97], [1.76, 0.84], [5.02, 3.02], [5.74, 3.84]
+])
+
+# Inisialisasi model GMM dengan 2 klaster
+gmm = GaussianMixture(n_components=2, covariance_type='full', means_init=np.array([[2.25, 3.47], [5.74, 3.84]]))
+gmm.fit(data)
+
+# Prediksi keanggotaan klaster
+clusters = gmm.predict(data)
+
+# Menampilkan hasil klasterisasi
+df_results = pd.DataFrame(data, columns=['x1', 'x2'])
+df_results['Cluster'] = clusters
+print(df_results)
+
+# Evaluasi Purity
+def purity_score(y_true, y_pred):
+    contingency_matrix = pd.crosstab(y_true, y_pred)
+    # Get the single purity value instead of a Series
+    purity = np.sum(np.amax(contingency_matrix, axis=0)) / np.sum(contingency_matrix.values) 
+    return purity  # Return the single purity value
+
+# Simulasi label ground-truth (misalnya dengan membagi secara manual)
+true_labels = np.array([0, 1, 1, 0, 0, 0, 0, 0, 1, 1])  # Asumsi, bisa diganti dengan label sebenarnya
+
+
+# Pastikan purity dan rand_index adalah float, bukan Pandas Series
+purity = purity_score(true_labels, clusters)  
+rand_index = adjusted_rand_score(true_labels, clusters)  
+
+print("\n📊 Evaluasi Klasterisasi:")
+print(f"Purity Score: {purity:.4f}") # No need for float() now
+print(f"Rand Index: {rand_index:.4f}")
